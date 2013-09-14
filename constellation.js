@@ -1,6 +1,3 @@
-var APPROACHHTML5=true;
-
-
 function getURLParameter(name) { return decodeURI( (RegExp(name + '=' + '(.+?)(&|$)').exec(location.search)||[,null])[1] ); }
 function diff(a,b){return Math.abs(a-b);}
 var MyMap={};
@@ -11,9 +8,11 @@ var MapPoint=function(x,y,value,img,id)
     this.y=y;
     this.value=value;
     this.img=img;
-    this.value=0;
     this.LinkedBy=[];
     this.LinkedTo=[];
+    this.LinkedByPath=[];
+    this.LinkedToPath=[];
+    
     this.GroupPath=0;
     this.GroupAngle=0;
     this.LayoutPath=0;
@@ -24,8 +23,8 @@ var MapPoint=function(x,y,value,img,id)
 
 var NodeMap=function(MapSource)
 {    
-    $elf.MapSource=typeof MapSource !== 'undefined' ? MapSource : 'http://service.approachfoundation.org/Treedata.php';
     $elf=this;
+    $elf.MapSource=typeof MapSource !== 'undefined' ? MapSource : 'http://service.approachfoundation.org/Treedata.php';
     $elf.Stage=Raphael(document.getElementById('Stage'),'100%','100%');
     $elf.DisplayNodes=[];
     $elf.Clusters=[];
@@ -45,12 +44,19 @@ var NodeMap=function(MapSource)
     $elf.images=['http://web.approachfoundation.org/archival/raph.html','http://web.approachfoundation.org/archival/raph.html','http://web.approachfoundation.org/archival/raph.html' ,'http://web.approachfoundation.org/archival/raph.html',
     'http://web.approachfoundation.org/archival/raph.html','http://web.approachfoundation.org/archival/raph.html', 'http://web.approachfoundation.org/archival/raph.html', 'http://web.approachfoundation.org/archival/raph.html', 'http://web.approachfoundation.org/archival/raph.html','http://web.approachfoundation.org/archival/raph.html', 'http://web.approachfoundation.org/archival/raph.html']
 
-    $elf.click=function(e){ };
+    $elf.click=function(e){ console.log('Click ',this);};
     $elf.move=function(dx,dy)
     {
       this.transform('t'+dx+','+dy);
       this.map.x=dx;
       this.map.y=dy;
+      
+      $(this.map.LinkedBy).each(function(i,node)
+      {
+	
+      });
+
+      console.log('Move', this);
     };
 
     $elf.startMove = function()
@@ -64,8 +70,6 @@ var NodeMap=function(MapSource)
 
     };
 
-   //[I'd rather have] someone stupid at opencl rather than someone good at java.
-   
     $elf.call=
     {
 	init:function()
@@ -74,12 +78,15 @@ var NodeMap=function(MapSource)
 	    $elf.Origin=$elf.Stage.image('http://static.approachfoundation.org/img/logo.png', point.x-60, point.y-60, 120, 120);
 	    $elf.Origin.map=point;
 	    $elf.Origin.map.selfIndex = 0;
+	    $elf.Origin.map.id = 0;
 	    $elf.Origin.map.GroupPath =$elf.Stage.path($elf.call.PolarArc( point.x,point.y,144,144,-0.001,359.999, -90 )).attr({opacity:'0.3', color: '000', fill:'#fff'}).drag($elf.move,$elf.startMove,$elf.endMove);
 	    //$elf.call.PathCircle(point.x,point.y,144)
 	    
 	    $elf.Origin.map.GroupAngle =360;
 	    $elf.Origin.map.LayoutPath = $elf.Origin.map.GroupPath;
 	    $elf.Origin.map.LayoutAngle = -90;
+	    $elf.Origin.map.LinkedByPath[0]=$elf.Origin.map.GroupPath;
+	    
 	    $elf.Origin.map.value = "Approach";
 	    
 	    
@@ -92,17 +99,32 @@ var NodeMap=function(MapSource)
 	    {
 		t={};
 		t.links=$.parseJSON(Response);
+		
+		//This just parses and filters the response, filtering will happen on the
+		//Server side when we know how to make map navigation extensible and simple
 		$($.parseJSON(Response)).each( function(i,node)
 		{
 		    if (node.value==$.parseJSON(getURLParameter('json')) ){ t=node; return false;}
 		    return true;
 		} );
-		console.log(t.links);
-		console.log($elf.call.ReceiveNodes(t.links,0));  $elf.call.ConnectNodes(); console.log($elf.Clusters);
+		
+		//Create the map from a ready json tree
+		$elf.call.ReceiveNodes(t.links,0);
+		
+		//Create visual connections between nodes
+		//Also used in programmatic animations
+		$elf.call.ConnectNodes();
+		
+		//Trying to animate the connections, not working
+		$.each($elf.DisplayNodes,function(i,node)
+		{
+		    //console.log(node);
+		    if (node.map.LinkedBy[0]==0) { $elf.Origin.map.LinkedTo.push(node.map.selfIndex); }
+		    
+		    node.animation=Raphael.animation(node.map.LinkedToPath[0]);
+		    node.map.LinkedByPath[0].animate(node.animation.delay(1000).repeat(1000));		
+		});
 	    });
-
-	    
-
 	},
 	ConnectNodes:function()
 	{
@@ -110,10 +132,25 @@ var NodeMap=function(MapSource)
 	    {
 		if(id==0) return;
 		
+		//Maybe put this into ConnectNodes and make this ConnectMap or merge into some kinda recursion?
+		//Other viable solutions definitely exist
 		for(i=0;i<node.map.LinkedBy.length;i++)
 		{
-		  if(node.map.LinkedBy[i]==0) break;
 		  ConnectedNode = $elf.DisplayNodes[node.map.LinkedBy[i]];
+
+		  Point1=ConnectedNode.map;
+		  Point2=node.map;
+	  
+		  RegulatorX1 = ((Point1.x+Point2.x)*.5) - 28;		//Regulators detirmine how curvey the connectors are
+		  RegulatorX2 = ((Point1.x+Point2.x)*.5) + 28;		//We should use radians or differentials instead ^_^;;
+		  RegulatorY1 = ((Point1.y+Point2.y)*.5) - 28;		//Or just a slick correction for approaching 45 degree angles
+		  RegulatorY2 = ((Point1.y+Point2.y)*.5) + 28;
+	  
+		  node.map.LinkedByPath.push($elf.call.curve3(Point1.x,Point1.y,Point2.x, Point2.y,RegulatorX1,RegulatorY1,RegulatorX1,RegulatorY1).toBack().attr($elf.LineStyle).glow({width: 2,color: 'black'}));
+		}
+		for(i=0;i<node.map.LinkedTo.length;i++)
+		{
+		  ConnectedNode = $elf.DisplayNodes[node.map.LinkedTo[i]];
 
 		  Point1=ConnectedNode.map;
 		  Point2=node.map;
@@ -123,29 +160,10 @@ var NodeMap=function(MapSource)
 		  RegulatorY1 = ((Point1.y+Point2.y)*.5) - 28;
 		  RegulatorY2 = ((Point1.y+Point2.y)*.5) + 28;
 	  
-		  //$(node.map.Connectors[i][0]).remove();
-		  //node.map.Connectors[i][0]=
-		  $elf.call.curve3(Point1.x,Point1.y,Point2.x, Point2.y,RegulatorX1,RegulatorY1,RegulatorX1,RegulatorY1).toBack().attr($elf.LineStyle).glow({width: 2,color: 'black'});
-		}		
-		/*
-		for(i=0;i<node.map.LinkedTo.length;i++)
-		{
-		  ConnectedNode = $elf.DisplayNodes[node.map.LinkedTo[i]];
-	  
-		  Point1=ConnectedNode.map;
-		  Point2=node.map;
-	  
-		  RegulatorX1 = ((Point1.x+Point2.x)*.5) - 28;
-		  RegulatorX2 = ((Point1.x+Point2.x)*.5) + 28;
-		  RegulatorY1 = ((Point1.y+Point2.y)*.5) - 28;
-		  RegulatorY2 = ((Point1.y+Point2.y)*.5) + 28;
-	  
-		  //$(node.map.Connectors[i][1]).remove();
-		  //node.map.Connectors[i][1]=
-		  $elf.call.curve3(Point1.x,Point1.y,Point2.x, Point2.y,RegulatorX1,RegulatorY1,RegulatorX1,RegulatorY1).toBack().attr($elf.LineStyle).glow({width: 2,color: 'black'});
-		}*/
-		
-	    });  
+		  node.map.LinkedToPath.push($elf.call.curve3(Point1.x,Point1.y,Point2.x, Point2.y,RegulatorX1,RegulatorY1,RegulatorX1,RegulatorY1).toBack().attr({opacity:'0.1'}));
+		}
+	    });
+	    
 	},
 	MeasureCharacter:function(parent)
 	{
@@ -198,14 +216,8 @@ var NodeMap=function(MapSource)
 	    $elf.DisplayNodes[current].map.LinkedBy.push(From);
 	    $elf.Stage.text(Where.x,Where.y+10,Where.value).attr({stroke: '#000','fill': '#fff','font-size':12+4*($elf.tier<5?4/$elf.tier:0)+'px','font-family':"'Quattrocento Sans', sans-serif",'font-weight': 'bold'});	    
 	     
-	    //$elf.DisplayNodes[current].map.GroupPath = $elf.DisplayNodes[From].map.LayoutPath;
-
 	    return $elf.DisplayNodes[current];
 	},
-	ConnectNode:function(Node1,Node2)
-	{
-	},
-
 	SimpleArc:function(x, y, radius, start, end)
 	{
 	      var f = ((end - start) > Math.PI) ? 1 : 0;
