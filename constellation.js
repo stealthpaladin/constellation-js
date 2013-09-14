@@ -1,3 +1,5 @@
+var APPROACHHTML5=true;
+
 
 function getURLParameter(name) { return decodeURI( (RegExp(name + '=' + '(.+?)(&|$)').exec(location.search)||[,null])[1] ); }
 function diff(a,b){return Math.abs(a-b);}
@@ -20,8 +22,9 @@ var MapPoint=function(x,y,value,img,id)
     return this;
 }
 
-var NodeMap=function()
-{
+var NodeMap=function(MapSource)
+{    
+    $elf.MapSource=typeof MapSource !== 'undefined' ? MapSource : 'http://service.approachfoundation.org/Treedata.php';
     $elf=this;
     $elf.Stage=Raphael(document.getElementById('Stage'),'100%','100%');
     $elf.DisplayNodes=[];
@@ -85,7 +88,7 @@ var NodeMap=function()
 	    $elf.Origin.map.GroupPath.toFront();
 	    //$elf.Stage.text($elf.Origin.map.x,$elf.Origin.map.y-19,'approach').attr({stroke: '#000','fill': '#fff','font-size':'48px','font-family':"'Signika', sans-serif",'font-weight': 'bold'});	    
 
-	    $.get('http://service.approachfoundation.org/Treedata.php', function(Response)
+	    $.get($elf.MapSource, function(Response)
 	    {
 		t={};
 		t.links=$.parseJSON(Response);
@@ -303,4 +306,4 @@ CirclePlot=function()
 
 }
 
-$(function(){    MyMap=new NodeMap(); });
+$(function(){    MyMap=new NodeMap('http://service.approachfoundation.org/Treedata.php'); });
