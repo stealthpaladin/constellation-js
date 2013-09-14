@@ -1,7 +1,8 @@
 ConstellationJS
 ================
 
-An MIT Licensed node map generator and (soon to be) animated browser using RaphaelJS
+An MIT Licensed node map generator and (soon to be) animated browser using RaphaelJS. 
+
 Created by Garet Claborn and donated by Approach Foundation, LLC. 
 
 approachfoundation.com
